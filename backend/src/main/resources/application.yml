@@ -8,12 +8,12 @@ spring:
     name: sand-ship-stability-system
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/sand_ship_stability
-    username: postgres
-    password: postgres
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:sand_ship_stability}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 20
+      maximum-pool-size: ${DB_POOL_SIZE:20}
       minimum-idle: 5
       connection-timeout: 30000
 
@@ -39,10 +39,10 @@ spring:
       fail-on-empty-beans: false
 
   mqtt:
-    url: tcp://localhost:1883
+    url: tcp://${MQTT_HOST:localhost}:${MQTT_PORT:1883}
     client-id: sand-ship-backend
-    username: admin
-    password: password
+    username: ${MQTT_USER:admin}
+    password: ${MQTT_PASSWORD:password}
     topics:
       - ship/+/sensor/#
     completion-timeout: 5000
@@ -70,6 +70,38 @@ loading:
   optimization-timeout: 30000
   max-iterations: 1000
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,env,loggers
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.9,0.95,0.99
+  health:
+    defaults:
+      enabled: true
+    db:
+      enabled: true
+    diskspace:
+      enabled: true
+
 cors:
   allowed-origins:
     - http://localhost:3000
@@ -96,8 +128,8 @@ springdoc:
 logging:
   level:
     root: INFO
-    com.sandship: DEBUG
-    org.springframework.integration.mqtt: DEBUG
+    com.sandship: ${LOG_LEVEL:DEBUG}
+    org.springframework.integration.mqtt: INFO
     org.hibernate.SQL: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

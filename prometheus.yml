@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: 'sandship-backend'
+    metrics_path: '/api/actuator/prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['backend:8080']
+        labels:
+          application: 'sand-ship-stability-system'
+          environment: 'production'

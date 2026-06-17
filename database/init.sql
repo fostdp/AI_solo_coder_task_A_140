@@ -349,3 +349,56 @@ JOIN ships s ON cl.ship_id = s.id
 JOIN cargo_holds ch ON cl.hold_id = ch.id
 JOIN cargo_types ct ON cl.cargo_type_id = ct.id
 ORDER BY cl.ship_id, ch.hold_number;
+
+-- ============================================================
+-- Performance Indexes
+-- ============================================================
+
+-- sensor_data: time-range queries per ship
+CREATE INDEX IF NOT EXISTS idx_sensor_data_time_range
+    ON sensor_data(ship_id, timestamp DESC);
+
+-- sensor_data: roll angle threshold scan
+CREATE INDEX IF NOT EXISTS idx_sensor_data_roll
+    ON sensor_data(ship_id, roll_angle)
+    WHERE ABS(roll_angle) > 10.0;
+
+-- stability_results: warning status filter
+CREATE INDEX IF NOT EXISTS idx_stability_status
+    ON stability_results(ship_id, stability_status)
+    WHERE stability_status != 'NORMAL';
+
+-- stability_results: GM threshold scan
+CREATE INDEX IF NOT EXISTS idx_stability_gm
+    ON stability_results(ship_id, gm_value)
+    WHERE gm_value < 0.3;
+
+-- alarms: severity + unacknowledged composite
+CREATE INDEX IF NOT EXISTS idx_alarms_severity_ack
+    ON alarms(ship_id, severity, acknowledged)
+    WHERE acknowledged = false;
+
+-- alarms: triggered_at range queries
+CREATE INDEX IF NOT EXISTS idx_alarms_triggered
+    ON alarms(ship_id, triggered_at DESC);
+
+-- cargo_loadings: ship + optimized flag
+CREATE INDEX IF NOT EXISTS idx_cargo_loadings_ship_opt
+    ON cargo_loadings(ship_id, is_optimized);
+
+-- cargo_loadings: hold_id lookup
+CREATE INDEX IF NOT EXISTS idx_cargo_loadings_hold
+    ON cargo_loadings(hold_id);
+
+-- cargo_holds: ship + tank flag
+CREATE INDEX IF NOT EXISTS idx_cargo_holds_ship_tank
+    ON cargo_holds(ship_id, is_tank)
+    WHERE is_tank = true;
+
+-- loading_optimizations: ship latest
+CREATE INDEX IF NOT EXISTS idx_loading_opt_ship_time
+    ON loading_optimizations(ship_id, optimization_time DESC);
+
+-- loading_optimizations: algorithm used stats
+CREATE INDEX IF NOT EXISTS idx_loading_opt_algorithm
+    ON loading_optimizations(algorithm_used);
