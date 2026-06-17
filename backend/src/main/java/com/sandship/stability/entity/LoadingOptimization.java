@@ -63,6 +63,12 @@ public class LoadingOptimization {
     @Column(name = "objective_value", precision = 12, scale = 2)
     private BigDecimal objectiveValue;
 
+    @Column(name = "solve_time_ms", precision = 12, scale = 0)
+    private BigDecimal solveTimeMs;
+
+    @Column(name = "algorithm_used", length = 50)
+    private String algorithmUsed;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
