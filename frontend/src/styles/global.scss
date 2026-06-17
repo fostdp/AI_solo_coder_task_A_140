@@ -1,0 +1,81 @@
+$primary-color: #409EFF;
+$success-color: #67C23A;
+$warning-color: #E6A23C;
+$danger-color: #F56C6C;
+$info-color: #909399;
+
+$bg-dark: #0c1929;
+$bg-card: rgba(15, 35, 60, 0.85);
+$bg-card-hover: rgba(20, 50, 85, 0.95);
+$border-color: rgba(64, 158, 255, 0.3);
+$text-primary: #ffffff;
+$text-secondary: #a0aec0;
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(64, 158, 255, 0.5);
+  border-radius: 3px;
+
+  &:hover {
+    background: rgba(64, 158, 255, 0.8);
+  }
+}
+
+.card {
+  background: $bg-card;
+  border: 1px solid $border-color;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: $bg-card-hover;
+    border-color: rgba(64, 158, 255, 0.6);
+    box-shadow: 0 4px 20px rgba(64, 158, 255, 0.15);
+  }
+}
+
+.status-normal {
+  color: $success-color;
+}
+
+.status-caution {
+  color: $warning-color;
+}
+
+.status-warning {
+  color: #ff9800;
+}
+
+.status-critical {
+  color: $danger-color;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(64, 158, 255, 0.8);
+}
+
+.data-value {
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  color: $primary-color;
+}
+
+canvas {
+  display: block;
+}
