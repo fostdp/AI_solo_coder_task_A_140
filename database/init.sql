@@ -34,6 +34,11 @@ CREATE TABLE IF NOT EXISTS cargo_holds (
     center_gravity_x NUMERIC(10, 2) NOT NULL,
     center_gravity_y NUMERIC(10, 2) NOT NULL,
     center_gravity_z NUMERIC(10, 2) NOT NULL,
+    is_tank BOOLEAN DEFAULT false,
+    tank_length NUMERIC(10, 2),
+    tank_breadth NUMERIC(10, 2),
+    liquid_density NUMERIC(10, 3),
+    tank_fullness NUMERIC(5, 2),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -104,6 +109,8 @@ CREATE TABLE IF NOT EXISTS stability_results (
     righting_moment NUMERIC(12, 2),
     roll_period NUMERIC(10, 3),
     gm_value NUMERIC(8, 4),
+    free_surface_correction NUMERIC(8, 4),
+    gm_uncorrected NUMERIC(8, 4),
     stability_status VARCHAR(20) NOT NULL DEFAULT 'NORMAL',
     warning_message TEXT,
     curve_points JSONB,
@@ -127,6 +134,8 @@ CREATE TABLE IF NOT EXISTS loading_optimizations (
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     solution JSONB,
     objective_value NUMERIC(12, 2),
+    solve_time_ms NUMERIC(12, 2),
+    algorithm_used VARCHAR(50),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -218,6 +227,56 @@ ON CONFLICT DO NOTHING;
 INSERT INTO cargo_holds (ship_id, hold_number, hold_name, capacity_cubic, max_weight, 
                          center_gravity_x, center_gravity_y, center_gravity_z)
 SELECT s.id, 4, '后货舱', 95.00, 70.00, 11.50, 0.00, 1.30
+FROM ships s WHERE s.name = '宋代沙船-002'
+ON CONFLICT DO NOTHING;
+
+-- 第一艘船液舱
+INSERT INTO cargo_holds (ship_id, hold_number, hold_name, capacity_cubic, max_weight, 
+                         center_gravity_x, center_gravity_y, center_gravity_z,
+                         is_tank, tank_length, tank_breadth, liquid_density, tank_fullness)
+SELECT s.id, 5, '淡水舱', 12.00, 12.00, -8.00, 3.50, 0.50,
+       true, 4.00, 3.00, 1.000, 0.6
+FROM ships s WHERE s.name = '宋代沙船-001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO cargo_holds (ship_id, hold_number, hold_name, capacity_cubic, max_weight, 
+                         center_gravity_x, center_gravity_y, center_gravity_z,
+                         is_tank, tank_length, tank_breadth, liquid_density, tank_fullness)
+SELECT s.id, 6, '压载水舱-左', 18.00, 18.00, 0.00, -4.20, 0.30,
+       true, 6.00, 3.00, 1.025, 0.4
+FROM ships s WHERE s.name = '宋代沙船-001'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO cargo_holds (ship_id, hold_number, hold_name, capacity_cubic, max_weight, 
+                         center_gravity_x, center_gravity_y, center_gravity_z,
+                         is_tank, tank_length, tank_breadth, liquid_density, tank_fullness)
+SELECT s.id, 7, '压载水舱-右', 18.00, 18.00, 0.00, 4.20, 0.30,
+       true, 6.00, 3.00, 1.025, 0.4
+FROM ships s WHERE s.name = '宋代沙船-001'
+ON CONFLICT DO NOTHING;
+
+-- 第二艘船液舱
+INSERT INTO cargo_holds (ship_id, hold_number, hold_name, capacity_cubic, max_weight, 
+                         center_gravity_x, center_gravity_y, center_gravity_z,
+                         is_tank, tank_length, tank_breadth, liquid_density, tank_fullness)
+SELECT s.id, 5, '淡水舱', 15.00, 15.00, -9.00, 3.80, 0.55,
+       true, 4.50, 3.30, 1.000, 0.7
+FROM ships s WHERE s.name = '宋代沙船-002'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO cargo_holds (ship_id, hold_number, hold_name, capacity_cubic, max_weight, 
+                         center_gravity_x, center_gravity_y, center_gravity_z,
+                         is_tank, tank_length, tank_breadth, liquid_density, tank_fullness)
+SELECT s.id, 6, '压载水舱-左', 22.00, 22.00, 0.00, -4.50, 0.35,
+       true, 6.50, 3.40, 1.025, 0.3
+FROM ships s WHERE s.name = '宋代沙船-002'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO cargo_holds (ship_id, hold_number, hold_name, capacity_cubic, max_weight, 
+                         center_gravity_x, center_gravity_y, center_gravity_z,
+                         is_tank, tank_length, tank_breadth, liquid_density, tank_fullness)
+SELECT s.id, 7, '压载水舱-右', 22.00, 22.00, 0.00, 4.50, 0.35,
+       true, 6.50, 3.40, 1.025, 0.3
 FROM ships s WHERE s.name = '宋代沙船-002'
 ON CONFLICT DO NOTHING;
 
