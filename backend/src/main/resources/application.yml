@@ -1,0 +1,105 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: sand-ship-stability-system
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/sand_ship_stability
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        jdbc:
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+    open-in-view: false
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+
+  mqtt:
+    url: tcp://localhost:1883
+    client-id: sand-ship-backend
+    username: admin
+    password: password
+    topics:
+      - ship/+/sensor/#
+    completion-timeout: 5000
+    connection-timeout: 30000
+    keep-alive-interval: 60
+
+  websocket:
+    endpoint: /ws/stability
+    allowed-origins: "*"
+    heartbeat-interval: 30000
+
+stability:
+  min-gm-threshold: 0.3
+  max-roll-angle: 15.0
+  max-bilge-water: 0.5
+  calculation-interval: 60000
+  curve-step: 1.0
+  curve-max-angle: 60.0
+
+loading:
+  default-min-gm: 0.3
+  optimization-timeout: 30000
+  max-iterations: 1000
+
+cors:
+  allowed-origins:
+    - http://localhost:3000
+    - http://localhost:8080
+    - http://127.0.0.1:3000
+  allowed-methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  allowed-headers: "*"
+  allow-credentials: true
+  max-age: 3600
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+logging:
+  level:
+    root: INFO
+    com.sandship: DEBUG
+    org.springframework.integration.mqtt: DEBUG
+    org.hibernate.SQL: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/sand-ship-stability.log
+    max-size: 10MB
+    max-history: 30
