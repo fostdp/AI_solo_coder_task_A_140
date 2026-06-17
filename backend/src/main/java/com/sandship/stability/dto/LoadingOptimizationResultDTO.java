@@ -30,5 +30,7 @@ public class LoadingOptimizationResultDTO {
     private List<Map<String, Object>> solution;
     private List<Map<String, Object>> holdAllocations;
     private BigDecimal objectiveValue;
+    private BigDecimal solveTimeMs;
+    private String algorithmUsed;
     private LocalDateTime createdAt;
 }
