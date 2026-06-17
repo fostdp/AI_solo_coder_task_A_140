@@ -84,6 +84,23 @@
                 <span class="unit">m</span>
               </el-form-item>
 
+              <el-form-item label="算法选项">
+                <div class="algorithm-options">
+                  <el-checkbox v-model="optimizationConfig.useHeuristic">
+                    启用启发式算法
+                    <el-tooltip content="货物种类多时可显著加速求解" placement="top">
+                      <el-icon class="info-icon"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </el-checkbox>
+                  <el-checkbox v-model="optimizationConfig.refineWithMip">
+                    MIP精化
+                    <el-tooltip content="启发式求解后用精确算法进一步优化" placement="top">
+                      <el-icon class="info-icon"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </el-checkbox>
+                </div>
+              </el-form-item>
+
               <el-form-item label="货物信息">
                 <div class="cargo-info-grid">
                   <div class="cargo-info-item grain">
@@ -391,6 +408,29 @@
                       </el-tag>
                     </div>
                   </div>
+
+                  <div v-if="optimizationResult.algorithmUsed || optimizationResult.solveTimeMs" class="algorithm-info">
+                    <h4 class="algorithm-title">
+                      <el-icon><MagicStick /></el-icon>
+                      求解信息
+                    </h4>
+                    <div class="algorithm-grid">
+                      <div class="algorithm-item">
+                        <el-icon class="alg-icon"><Cpu /></el-icon>
+                        <div class="alg-content">
+                          <span class="alg-label">使用算法</span>
+                          <span class="alg-value">{{ getAlgorithmName(optimizationResult.algorithmUsed) }}</span>
+                        </div>
+                      </div>
+                      <div class="algorithm-item">
+                        <el-icon class="alg-icon"><Timer /></el-icon>
+                        <div class="alg-content">
+                          <span class="alg-label">求解时间</span>
+                          <span class="alg-value">{{ optimizationResult.solveTimeMs?.toFixed(0) || '--' }} ms</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="constraints-info">
@@ -455,7 +495,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import {
   Box, Setting, Wheat, Grid, Operation, Refresh, Warehouse,
   DataLine, CircleCheck, TrendCharts, Histogram, Check,
-  DataAnalysis, PieChart, Warning
+  DataAnalysis, PieChart, Warning, QuestionFilled, Timer, MagicStick, Cpu
 } from '@element-plus/icons-vue'
 import { Chart, registerables } from 'chart.js'
 import { useShipData } from '@/composables/useShipData'
@@ -487,7 +527,9 @@ const optimizationConfig = ref({
   saltPriority: 1.0,
   minGm: 0.3,
   maxRollAngle: 15,
-  maxTrim: 0.5
+  maxTrim: 0.5,
+  useHeuristic: false,
+  refineWithMip: false
 })
 
 const priorityMarks = {
@@ -523,6 +565,16 @@ const getUtilizationColor = (percent) => {
   return '#909399'
 }
 
+const getAlgorithmName = (code) => {
+  const names = {
+    'MIP_EXACT': '精确整数规划',
+    'MIP_REFINED': '启发式+MIP精化',
+    'HEURISTIC_GREEDY': '贪心启发式',
+    'HEURISTIC_GM_ADJUSTED': '启发式+GM调整'
+  }
+  return names[code] || code || '未知算法'
+}
+
 const runOptimization = async () => {
   if (!props.shipId) {
     ElMessage.warning('请先选择船舶')
@@ -537,7 +589,9 @@ const runOptimization = async () => {
       saltPriority: optimizationConfig.value.saltPriority,
       minGm: optimizationConfig.value.minGm,
       maxRollAngle: optimizationConfig.value.maxRollAngle,
-      maxTrim: optimizationConfig.value.maxTrim
+      maxTrim: optimizationConfig.value.maxTrim,
+      useHeuristic: optimizationConfig.value.useHeuristic,
+      refineWithMip: optimizationConfig.value.refineWithMip
     }
 
     const res = await optimizeLoading(request)
@@ -603,7 +657,9 @@ const resetConfig = () => {
     saltPriority: 1.0,
     minGm: 0.3,
     maxRollAngle: 15,
-    maxTrim: 0.5
+    maxTrim: 0.5,
+    useHeuristic: false,
+    refineWithMip: false
   }
 }
 
@@ -1225,6 +1281,82 @@ onUnmounted(() => {
             font-size: 10px;
             color: #F56C6C;
           }
+        }
+      }
+    }
+  }
+}
+
+.algorithm-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  .el-checkbox {
+    color: #ffffff;
+
+    :deep(.el-checkbox__label) {
+      color: #ffffff;
+    }
+  }
+
+  .info-icon {
+    color: #409EFF;
+    margin-left: 4px;
+    cursor: help;
+  }
+}
+
+.algorithm-info {
+  padding: 16px;
+  background: rgba(64, 158, 255, 0.05);
+  border: 1px solid rgba(64, 158, 255, 0.2);
+  border-radius: 8px;
+  margin-bottom: 16px;
+
+  .algorithm-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #409EFF;
+    font-size: 14px;
+    margin: 0 0 12px 0;
+
+    .el-icon {
+      font-size: 18px;
+    }
+  }
+
+  .algorithm-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+
+    .algorithm-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+
+      .alg-icon {
+        font-size: 24px;
+        color: #67C23A;
+      }
+
+      .alg-content {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+
+        .alg-label {
+          font-size: 11px;
+          color: #a0aec0;
+        }
+
+        .alg-value {
+          font-size: 16px;
+          font-weight: bold;
+          color: #ffffff;
+          font-family: 'Courier New', monospace;
         }
       }
     }
