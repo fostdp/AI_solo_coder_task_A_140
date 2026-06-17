@@ -251,36 +251,73 @@ const createSkyDome = () => {
 }
 
 const createWater = () => {
-  const waterGeometry = new THREE.PlaneGeometry(1000, 1000, 128, 128)
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  const segments = isMobile ? 32 : 64
+  
+  const waterGeometry = new THREE.PlaneGeometry(800, 800, segments, segments)
   
   const waterMaterial = new THREE.ShaderMaterial({
     uniforms: {
       time: { value: 0 },
       waterColor: { value: new THREE.Color(0x0077be) },
       foamColor: { value: new THREE.Color(0xffffff) },
-      depthColor: { value: new THREE.Color(0x001a33) }
+      depthColor: { value: new THREE.Color(0x001a33) },
+      waveParams: {
+        value: [
+          new THREE.Vector4(0.02, 0.8, 0.0, 0.6),
+          new THREE.Vector4(0.03, 0.5, 1.5, 0.4),
+          new THREE.Vector4(0.015, 0.3, 3.0, 0.3)
+        ]
+      }
     },
     vertexShader: `
       uniform float time;
+      uniform vec4 waveParams[3];
       varying vec2 vUv;
       varying float vElevation;
       varying vec3 vNormal;
+      
+      vec3 gerstnerWave(vec2 pos, float steepness, float wavelength, float speed, float direction, float phase) {
+        float k = 2.0 * 3.14159 / wavelength;
+        float c = sqrt(9.8 / k);
+        vec2 d = normalize(vec2(cos(direction), sin(direction)));
+        float f = k * (dot(d, pos) - c * speed * time + phase);
+        float a = steepness / k;
+        
+        return vec3(
+          d.x * a * cos(f),
+          a * sin(f),
+          d.y * a * cos(f)
+        );
+      }
       
       void main() {
         vUv = uv;
         vec3 pos = position;
         
-        float wave1 = sin(pos.x * 0.02 + time * 0.8) * 0.8;
-        float wave2 = sin(pos.y * 0.03 + time * 1.2) * 0.5;
-        float wave3 = sin((pos.x + pos.y) * 0.015 + time * 0.5) * 0.6;
-        float wave4 = sin(pos.x * 0.05 - time * 0.3) * 0.3;
+        vec3 waveOffset = vec3(0.0);
+        vec3 normalOffset = vec3(0.0);
         
-        pos.z += wave1 + wave2 + wave3 + wave4;
+        for (int i = 0; i < 3; i++) {
+          vec4 wp = waveParams[i];
+          float dir = float(i) * 2.094;
+          vec3 wave = gerstnerWave(pos.xy, wp.w, 1.0 / wp.x, wp.y, dir, wp.z);
+          waveOffset += wave;
+          
+          float k = 2.0 * 3.14159 * wp.x;
+          float c = sqrt(9.8 / k);
+          vec2 d = normalize(vec2(cos(dir), sin(dir)));
+          float f = k * (dot(d, pos.xy) - c * wp.y * time + wp.z);
+          normalOffset += vec3(
+            -d.x * wp.w * cos(f),
+            wp.w * sin(f),
+            -d.y * wp.w * cos(f)
+          );
+        }
+        
+        pos += waveOffset;
         vElevation = pos.z;
-        
-        vec3 tangentX = normalize(vec3(1.0, 0.0, 0.02 * cos(pos.x * 0.02 + time * 0.8)));
-        vec3 tangentY = normalize(vec3(0.0, 1.0, 0.03 * cos(pos.y * 0.03 + time * 1.2)));
-        vNormal = normalize(cross(tangentY, tangentX));
+        vNormal = normalize(vec3(0.0, 1.0, 0.0) - normalOffset);
         
         gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
       }
@@ -298,21 +335,21 @@ const createWater = () => {
         vec3 lightDir = normalize(vec3(0.5, 0.8, 0.6));
         float diffuse = max(dot(vNormal, lightDir), 0.0);
         
-        float depthFactor = smoothstep(-1.0, 2.0, vElevation);
+        float depthFactor = smoothstep(-0.5, 1.0, vElevation);
         vec3 baseColor = mix(depthColor, waterColor, depthFactor);
         
-        float foamThreshold = 1.5;
-        float foamAmount = smoothstep(foamThreshold - 0.3, foamThreshold + 0.3, vElevation);
-        baseColor = mix(baseColor, foamColor, foamAmount * 0.6);
+        float foamThreshold = 0.5;
+        float foamAmount = smoothstep(foamThreshold - 0.1, foamThreshold + 0.1, vElevation);
+        baseColor = mix(baseColor, foamColor, foamAmount * 0.5);
         
         vec3 viewDir = normalize(vec3(0.0, 1.0, 1.0));
         vec3 reflectDir = reflect(-lightDir, vNormal);
-        float specular = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
+        float specular = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
         
-        vec3 finalColor = baseColor * (0.5 + diffuse * 0.5) + specular * 0.8;
+        vec3 finalColor = baseColor * (0.55 + diffuse * 0.45) + specular * 0.6;
         
-        float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 3.0);
-        finalColor = mix(finalColor, vec3(0.3, 0.6, 0.9), fresnel * 0.4);
+        float fresnel = pow(1.0 - max(dot(vNormal, viewDir), 0.0), 2.0);
+        finalColor = mix(finalColor, vec3(0.3, 0.6, 0.9), fresnel * 0.3);
         
         gl_FragColor = vec4(finalColor, 0.85);
       }
