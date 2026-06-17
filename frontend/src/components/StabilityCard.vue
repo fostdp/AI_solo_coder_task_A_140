@@ -31,6 +31,11 @@
         GM值 (初稳性高)
         <span class="gm-threshold">阈值: {{ minGm }}m</span>
       </div>
+      <div v-if="stabilityData?.freeSurfaceCorrection > 0" class="fsc-info">
+        <el-icon><InfoFilled /></el-icon>
+        自由液面修正: -{{ stabilityData.freeSurfaceCorrection.toFixed(4) }}m
+        <span class="fsc-uncorrected">(未修正: {{ stabilityData.gmUncorrected?.toFixed(3) }}m)</span>
+      </div>
     </div>
 
     <div class="stability-metrics">
@@ -61,7 +66,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { TrendCharts, Warning } from '@element-plus/icons-vue'
+import { TrendCharts, Warning, InfoFilled } from '@element-plus/icons-vue'
 
 const props = defineProps({
   stabilityData: {
@@ -203,6 +208,29 @@ const getGmOffset = () => {
       display: block;
       font-size: 12px;
       margin-top: 4px;
+    }
+  }
+
+  .fsc-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: rgba(64, 158, 255, 0.1);
+    border: 1px solid rgba(64, 158, 255, 0.3);
+    border-radius: 6px;
+    font-size: 12px;
+    color: #409EFF;
+
+    .el-icon {
+      flex-shrink: 0;
+    }
+
+    .fsc-uncorrected {
+      color: #a0aec0;
+      margin-left: 4px;
     }
   }
 }
