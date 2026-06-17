@@ -46,6 +46,21 @@ public class CargoHold {
     @Column(name = "center_gravity_z", nullable = false, precision = 10, scale = 2)
     private BigDecimal centerGravityZ;
 
+    @Column(name = "is_tank")
+    private Boolean isTank = false;
+
+    @Column(name = "tank_length", precision = 10, scale = 2)
+    private BigDecimal tankLength;
+
+    @Column(name = "tank_breadth", precision = 10, scale = 2)
+    private BigDecimal tankBreadth;
+
+    @Column(name = "liquid_density", precision = 10, scale = 3)
+    private BigDecimal liquidDensity;
+
+    @Column(name = "tank_fullness", precision = 5, scale = 2)
+    private BigDecimal tankFullness;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
