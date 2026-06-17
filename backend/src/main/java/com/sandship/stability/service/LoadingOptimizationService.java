@@ -53,6 +53,9 @@ public class LoadingOptimizationService {
     @Autowired
     private LoadingConfig loadingConfig;
 
+    private static final int HEURISTIC_THRESHOLD = 20;
+    private static final long MIP_TIME_LIMIT = 30000;
+
     @Transactional
     public LoadingOptimizationResultDTO optimizeLoading(LoadingOptimizationRequest request) {
         UUID shipId = request.getShipId();
@@ -87,11 +90,45 @@ public class LoadingOptimizationService {
         optimization = optimizationRepository.save(optimization);
 
         try {
-            OptimizationResult result = solveIntegerProgramming(
-                    ship, cargoHolds, grain, salt,
-                    request.getGrainWeight(), request.getSaltWeight(),
-                    minGmRequired, request.getPrioritizeGrain()
-            );
+            long startTime = System.currentTimeMillis();
+            OptimizationResult result;
+
+            int problemSize = cargoHolds.size() * 2;
+            if (problemSize > HEURISTIC_THRESHOLD || Boolean.TRUE.equals(request.getUseHeuristic())) {
+                log.info("问题规模较大({}变量)，先使用启发式算法求解", problemSize);
+                result = solveWithHeuristic(
+                        ship, cargoHolds, grain, salt,
+                        request.getGrainWeight(), request.getSaltWeight(),
+                        minGmRequired, request.getPrioritizeGrain()
+                );
+
+                if (result.isFeasible()) {
+                    long heuristicTime = System.currentTimeMillis() - startTime;
+                    log.info("启发式算法完成，耗时: {}ms，总载重: {}t", heuristicTime, result.totalWeight);
+
+                    long remainingTime = MIP_TIME_LIMIT - heuristicTime;
+                    if (remainingTime > 5000 && Boolean.TRUE.equals(request.getRefineWithMip())) {
+                        log.info("使用MIP进行精化，剩余时间: {}ms", remainingTime);
+                        OptimizationResult mipResult = solveIntegerProgramming(
+                                ship, cargoHolds, grain, salt,
+                                request.getGrainWeight(), request.getSaltWeight(),
+                                minGmRequired, request.getPrioritizeGrain(),
+                                result, remainingTime
+                        );
+                        if (mipResult.isFeasible() && mipResult.objectiveValue.compareTo(result.objectiveValue) > 0) {
+                            result = mipResult;
+                            log.info("MIP精化完成，目标值提升: {} -> {}", result.objectiveValue, mipResult.objectiveValue);
+                        }
+                    }
+                }
+            } else {
+                result = solveIntegerProgramming(
+                        ship, cargoHolds, grain, salt,
+                        request.getGrainWeight(), request.getSaltWeight(),
+                        minGmRequired, request.getPrioritizeGrain(),
+                        null, MIP_TIME_LIMIT
+                );
+            }
 
             optimization.setStatus(result.isFeasible() ? "SUCCESS" : "INFEASIBLE");
             optimization.setTotalCargoWeight(result.totalWeight);
@@ -100,6 +137,8 @@ public class LoadingOptimizationService {
             optimization.setResultingGm(result.resultingGm);
             optimization.setObjectiveValue(result.objectiveValue);
             optimization.setSolution(result.solution);
+            optimization.setSolveTimeMs(BigDecimal.valueOf(System.currentTimeMillis() - startTime));
+            optimization.setAlgorithmUsed(result.algorithmUsed);
 
             if (result.isFeasible()) {
                 saveLoadingPlan(shipId, cargoHolds, grain, salt, result);
@@ -120,10 +159,16 @@ public class LoadingOptimizationService {
     private OptimizationResult solveIntegerProgramming(
             Ship ship, List<CargoHold> holds, CargoType grain, CargoType salt,
             BigDecimal targetGrainWeight, BigDecimal targetSaltWeight,
-            BigDecimal minGmRequired, Boolean prioritizeGrain) {
+            BigDecimal minGmRequired, Boolean prioritizeGrain,
+            OptimizationResult initialSolution, long timeLimitMs) {
 
         int numHolds = holds.size();
         MPSolver solver = MPSolver.createSolver("CBC");
+
+        solver.setTimeLimit(timeLimitMs);
+        if (initialSolution != null) {
+            solver.setNumThreads(4);
+        }
 
         MPVariable[][] x = new MPVariable[numHolds][2];
         for (int i = 0; i < numHolds; i++) {
@@ -280,6 +325,7 @@ public class LoadingOptimizationService {
         double gm = km - cgZ;
 
         result.resultingGm = BigDecimal.valueOf(gm).setScale(4, RoundingMode.HALF_UP);
+        result.algorithmUsed = initialSolution != null ? "MIP_REFINED" : "MIP_EXACT";
 
         if (gm < minGmRequired.doubleValue()) {
             log.warn("优化结果GM值(%.3f)低于要求(%.3f)，尝试调整", gm, minGmRequired);
@@ -288,6 +334,361 @@ public class LoadingOptimizationService {
         }
 
         return result;
+    }
+
+    private OptimizationResult solveWithHeuristic(
+            Ship ship, List<CargoHold> holds, CargoType grain, CargoType salt,
+            BigDecimal targetGrainWeight, BigDecimal targetSaltWeight,
+            BigDecimal minGmRequired, Boolean prioritizeGrain) {
+
+        int numHolds = holds.size();
+        double grainWeight = grain.getUnitWeight().doubleValue();
+        double saltWeight = salt.getUnitWeight().doubleValue();
+        double grainDensity = grain.getDensity().doubleValue();
+        double saltDensity = salt.getDensity().doubleValue();
+
+        double grainPriority = prioritizeGrain != null && prioritizeGrain ? 1.5 : 1.0;
+        double saltPriority = 1.0;
+
+        double totalGrainTarget = targetGrainWeight != null ? targetGrainWeight.doubleValue() : Double.MAX_VALUE;
+        double totalSaltTarget = targetSaltWeight != null ? targetSaltWeight.doubleValue() : Double.MAX_VALUE;
+        double maxDeadweight = ship.getDeadweightTons().doubleValue();
+
+        double[][] weights = new double[numHolds][2];
+        double totalGrainLoaded = 0;
+        double totalSaltLoaded = 0;
+        double totalWeight = 0;
+
+        List<HoldScore> holdScores = new ArrayList<>();
+        for (int i = 0; i < numHolds; i++) {
+            CargoHold hold = holds.get(i);
+            double kg = hold.getCenterGravityZ().doubleValue();
+            double lowerKgPenalty = 1.0 + (3.0 - kg) * 0.2;
+            holdScores.add(new HoldScore(i, lowerKgPenalty));
+        }
+        holdScores.sort((a, b) -> Double.compare(b.score, a.score));
+
+        for (HoldScore hs : holdScores) {
+            int i = hs.holdIndex;
+            CargoHold hold = holds.get(i);
+            double remainingWeightCap = hold.getMaxWeight().doubleValue();
+            double remainingVolumeCap = hold.getCapacityCubic().doubleValue();
+
+            while (true) {
+                boolean loaded = false;
+
+                if (totalGrainLoaded < totalGrainTarget && totalWeight < maxDeadweight) {
+                    double grainUnits = Math.min(
+                            remainingWeightCap / grainWeight,
+                            remainingVolumeCap * grainDensity
+                    );
+                    grainUnits = Math.min(grainUnits, (totalGrainTarget - totalGrainLoaded) / grainWeight);
+                    grainUnits = Math.min(grainUnits, (maxDeadweight - totalWeight) / grainWeight);
+                    grainUnits = Math.floor(grainUnits);
+
+                    if (grainUnits >= 1) {
+                        double w = grainUnits * grainWeight;
+                        weights[i][0] += w;
+                        totalGrainLoaded += w;
+                        totalWeight += w;
+                        remainingWeightCap -= w;
+                        remainingVolumeCap -= w / grainDensity;
+                        loaded = true;
+                    }
+                }
+
+                if (totalSaltLoaded < totalSaltTarget && totalWeight < maxDeadweight && remainingWeightCap > saltWeight) {
+                    double saltUnits = Math.min(
+                            remainingWeightCap / saltWeight,
+                            remainingVolumeCap * saltDensity
+                    );
+                    saltUnits = Math.min(saltUnits, (totalSaltTarget - totalSaltLoaded) / saltWeight);
+                    saltUnits = Math.min(saltUnits, (maxDeadweight - totalWeight) / saltWeight);
+                    saltUnits = Math.floor(saltUnits);
+
+                    if (saltUnits >= 1) {
+                        double w = saltUnits * saltWeight;
+                        weights[i][1] += w;
+                        totalSaltLoaded += w;
+                        totalWeight += w;
+                        remainingWeightCap -= w;
+                        remainingVolumeCap -= w / saltDensity;
+                        loaded = true;
+                    }
+                }
+
+                if (!loaded) break;
+            }
+        }
+
+        double totalVolume = 0;
+        for (int i = 0; i < numHolds; i++) {
+            totalVolume += weights[i][0] / grainDensity + weights[i][1] / saltDensity;
+        }
+
+        OptimizationResult result = new OptimizationResult();
+        result.isFeasible = totalWeight > 0;
+        result.algorithmUsed = "HEURISTIC_GREEDY";
+
+        if (!result.isFeasible) {
+            return result;
+        }
+
+        result = localSearchOptimization(ship, holds, grain, salt, weights,
+                minGmRequired.doubleValue(), grainPriority, saltPriority,
+                totalGrainTarget, totalSaltTarget, maxDeadweight);
+
+        result.totalWeight = BigDecimal.valueOf(totalGrainLoaded + totalSaltLoaded)
+                .setScale(2, RoundingMode.HALF_UP);
+        result.totalVolume = BigDecimal.valueOf(totalVolume)
+                .setScale(2, RoundingMode.HALF_UP);
+        result.effectivePayload = result.totalWeight;
+        result.objectiveValue = BigDecimal.valueOf(
+                totalGrainLoaded * grainPriority + totalSaltLoaded * saltPriority
+        ).setScale(2, RoundingMode.HALF_UP);
+        result.grainWeight = BigDecimal.valueOf(totalGrainLoaded)
+                .setScale(2, RoundingMode.HALF_UP);
+        result.saltWeight = BigDecimal.valueOf(totalSaltLoaded)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        result.solution = buildSolution(holds, grain, salt, weights,
+                grainWeight, saltWeight, grainDensity, saltDensity);
+
+        double cgZ = calculateCGZ(ship, holds, weights);
+        double km = calculateKM(ship);
+        double gm = km - cgZ;
+        result.resultingGm = BigDecimal.valueOf(gm).setScale(4, RoundingMode.HALF_UP);
+
+        if (gm < minGmRequired.doubleValue()) {
+            result = adjustForGmConstraintHeuristic(ship, holds, grain, salt,
+                    weights, minGmRequired.doubleValue(), result,
+                    grainWeight, saltWeight, grainDensity, saltDensity);
+        }
+
+        return result;
+    }
+
+    private OptimizationResult localSearchOptimization(
+            Ship ship, List<CargoHold> holds, CargoType grain, CargoType salt,
+            double[][] weights, double minGm, double grainPriority, double saltPriority,
+            double totalGrainTarget, double totalSaltTarget, double maxDeadweight) {
+
+        int numHolds = holds.size();
+        double grainWeight = grain.getUnitWeight().doubleValue();
+        double saltWeight = salt.getUnitWeight().doubleValue();
+        double grainDensity = grain.getDensity().doubleValue();
+        double saltDensity = salt.getDensity().doubleValue();
+
+        boolean improved = true;
+        int iterations = 0;
+        int maxIterations = 50;
+
+        while (improved && iterations < maxIterations) {
+            improved = false;
+            iterations++;
+
+            for (int i = 0; i < numHolds; i++) {
+                for (int j = 0; j < numHolds; j++) {
+                    if (i == j) continue;
+
+                    CargoHold holdI = holds.get(i);
+                    CargoHold holdJ = holds.get(j);
+
+                    if (weights[i][0] >= grainWeight && weights[j][1] >= saltWeight) {
+                        double oldObj = weights[i][0] * grainPriority + weights[j][1] * saltPriority;
+
+                        weights[i][0] -= grainWeight;
+                        weights[i][1] += saltWeight;
+                        weights[j][1] -= saltWeight;
+                        weights[j][0] += grainWeight;
+
+                        double newObj = weights[i][0] * grainPriority + weights[j][1] * saltPriority;
+
+                        boolean weightValidI = weights[i][0] + weights[i][1] <= holdI.getMaxWeight().doubleValue();
+                        boolean weightValidJ = weights[j][0] + weights[j][1] <= holdJ.getMaxWeight().doubleValue();
+                        boolean volumeValidI = weights[i][0]/grainDensity + weights[i][1]/saltDensity <= holdI.getCapacityCubic().doubleValue();
+                        boolean volumeValidJ = weights[j][0]/grainDensity + weights[j][1]/saltDensity <= holdJ.getCapacityCubic().doubleValue();
+
+                        if (newObj > oldObj && weightValidI && weightValidJ && volumeValidI && volumeValidJ) {
+                            improved = true;
+                        } else {
+                            weights[i][0] += grainWeight;
+                            weights[i][1] -= saltWeight;
+                            weights[j][1] += saltWeight;
+                            weights[j][0] -= grainWeight;
+                        }
+                    }
+                }
+            }
+        }
+
+        OptimizationResult result = new OptimizationResult();
+        result.isFeasible = true;
+        return result;
+    }
+
+    private List<Map<String, Object>> buildSolution(
+            List<CargoHold> holds, CargoType grain, CargoType salt,
+            double[][] weights, double grainWeight, double saltWeight,
+            double grainDensity, double saltDensity) {
+
+        List<Map<String, Object>> solution = new ArrayList<>();
+        int numHolds = holds.size();
+
+        for (int i = 0; i < numHolds; i++) {
+            CargoHold hold = holds.get(i);
+
+            if (weights[i][0] > 0.01) {
+                Map<String, Object> alloc = new LinkedHashMap<>();
+                alloc.put("holdId", hold.getId().toString());
+                alloc.put("holdNumber", hold.getHoldNumber());
+                alloc.put("holdName", hold.getHoldName());
+                alloc.put("cargoCode", grain.getCargoCode());
+                alloc.put("cargoName", grain.getCargoName());
+                alloc.put("weight", round(weights[i][0], 2));
+                alloc.put("volume", round(weights[i][0] / grainDensity, 2));
+                alloc.put("units", (int) (weights[i][0] / grainWeight));
+                alloc.put("color", grain.getColorHex());
+                solution.add(alloc);
+            }
+
+            if (weights[i][1] > 0.01) {
+                Map<String, Object> alloc = new LinkedHashMap<>();
+                alloc.put("holdId", hold.getId().toString());
+                alloc.put("holdNumber", hold.getHoldNumber());
+                alloc.put("holdName", hold.getHoldName());
+                alloc.put("cargoCode", salt.getCargoCode());
+                alloc.put("cargoName", salt.getCargoName());
+                alloc.put("weight", round(weights[i][1], 2));
+                alloc.put("volume", round(weights[i][1] / saltDensity, 2));
+                alloc.put("units", (int) (weights[i][1] / saltWeight));
+                alloc.put("color", salt.getColorHex());
+                solution.add(alloc);
+            }
+        }
+
+        return solution;
+    }
+
+    private double calculateCGZ(Ship ship, List<CargoHold> holds, double[][] weights) {
+        double lightshipKg = ship.getLightshipWeight().multiply(new BigDecimal("0.8")).doubleValue();
+        double totalWeight = ship.getLightshipWeight().doubleValue();
+        double numerator = lightshipKg * ship.getLightshipWeight().doubleValue();
+
+        for (int i = 0; i < holds.size(); i++) {
+            double kg = holds.get(i).getCenterGravityZ().doubleValue();
+            totalWeight += weights[i][0] + weights[i][1];
+            numerator += weights[i][0] * kg + weights[i][1] * kg;
+        }
+
+        return numerator / totalWeight;
+    }
+
+    private double calculateKM(Ship ship) {
+        double cbZ = ship.getDesignDraft().multiply(new BigDecimal("0.54")).doubleValue();
+        double breadth = ship.getBreadthMolded().doubleValue();
+        double length = ship.getLengthOverall().doubleValue();
+        double it = (length * Math.pow(breadth, 3)) / 12.0;
+        double displacement = ship.getDisplacement().doubleValue();
+        double bmt = it / displacement * 1.025;
+        return cbZ + bmt;
+    }
+
+    private OptimizationResult adjustForGmConstraintHeuristic(
+            Ship ship, List<CargoHold> holds, CargoType grain, CargoType salt,
+            double[][] weights, double minGm, OptimizationResult currentResult,
+            double grainWeight, double saltWeight, double grainDensity, double saltDensity) {
+
+        int numHolds = holds.size();
+        double targetGm = minGm + 0.1;
+        double totalWeight = ship.getLightshipWeight().doubleValue();
+
+        for (int i = 0; i < numHolds; i++) {
+            totalWeight += weights[i][0] + weights[i][1];
+        }
+
+        double km = calculateKM(ship);
+        double targetCgZ = km - targetGm;
+
+        List<Integer> sortedHolds = new ArrayList<>();
+        for (int i = 0; i < numHolds; i++) {
+            sortedHolds.add(i);
+        }
+        sortedHolds.sort((a, b) -> Double.compare(
+                holds.get(b).getCenterGravityZ().doubleValue(),
+                holds.get(a).getCenterGravityZ().doubleValue()));
+
+        double cgZ = calculateCGZ(ship, holds, weights);
+        double excessMoment = (cgZ - targetCgZ) * totalWeight;
+
+        for (int holdIdx : sortedHolds) {
+            if (excessMoment <= 0) break;
+
+            CargoHold hold = holds.get(holdIdx);
+            double kg = hold.getCenterGravityZ().doubleValue();
+            if (kg <= targetCgZ) continue;
+
+            if (weights[holdIdx][1] > 1) {
+                double unitsToRemove = Math.min(
+                        weights[holdIdx][1] / saltWeight,
+                        excessMoment / (saltWeight * (kg - targetCgZ)));
+                unitsToRemove = Math.floor(unitsToRemove);
+
+                if (unitsToRemove > 0) {
+                    weights[holdIdx][1] -= unitsToRemove * saltWeight;
+                    excessMoment -= unitsToRemove * saltWeight * (kg - targetCgZ);
+                }
+            }
+
+            if (weights[holdIdx][0] > 1 && excessMoment > 0) {
+                double unitsToRemove = Math.min(
+                        weights[holdIdx][0] / grainWeight,
+                        excessMoment / (grainWeight * (kg - targetCgZ)));
+                unitsToRemove = Math.floor(unitsToRemove);
+
+                if (unitsToRemove > 0) {
+                    weights[holdIdx][0] -= unitsToRemove * grainWeight;
+                    excessMoment -= unitsToRemove * grainWeight * (kg - targetCgZ);
+                }
+            }
+        }
+
+        double totalGrain = 0, totalSalt = 0, totalVolume = 0;
+        for (int i = 0; i < numHolds; i++) {
+            totalGrain += weights[i][0];
+            totalSalt += weights[i][1];
+            totalVolume += weights[i][0] / grainDensity + weights[i][1] / saltDensity;
+        }
+
+        currentResult.solution = buildSolution(holds, grain, salt, weights,
+                grainWeight, saltWeight, grainDensity, saltDensity);
+        currentResult.totalWeight = BigDecimal.valueOf(totalGrain + totalSalt)
+                .setScale(2, RoundingMode.HALF_UP);
+        currentResult.totalVolume = BigDecimal.valueOf(totalVolume)
+                .setScale(2, RoundingMode.HALF_UP);
+        currentResult.effectivePayload = currentResult.totalWeight;
+        currentResult.grainWeight = BigDecimal.valueOf(totalGrain)
+                .setScale(2, RoundingMode.HALF_UP);
+        currentResult.saltWeight = BigDecimal.valueOf(totalSalt)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        double newCgZ = calculateCGZ(ship, holds, weights);
+        double newGm = km - newCgZ;
+        currentResult.resultingGm = BigDecimal.valueOf(newGm)
+                .setScale(4, RoundingMode.HALF_UP);
+        currentResult.algorithmUsed = "HEURISTIC_GM_ADJUSTED";
+
+        return currentResult;
+    }
+
+    private static class HoldScore {
+        int holdIndex;
+        double score;
+
+        HoldScore(int holdIndex, double score) {
+            this.holdIndex = holdIndex;
+            this.score = score;
+        }
     }
 
     private OptimizationResult adjustForGmConstraint(
@@ -497,6 +898,8 @@ public class LoadingOptimizationService {
         dto.setStatus(optimization.getStatus());
         dto.setSolution(optimization.getSolution());
         dto.setObjectiveValue(optimization.getObjectiveValue());
+        dto.setSolveTimeMs(optimization.getSolveTimeMs());
+        dto.setAlgorithmUsed(optimization.getAlgorithmUsed());
         dto.setCreatedAt(optimization.getCreatedAt());
 
         List<Map<String, Object>> holdAllocations = new ArrayList<>();
@@ -541,6 +944,7 @@ public class LoadingOptimizationService {
         BigDecimal resultingGm;
         BigDecimal objectiveValue;
         List<Map<String, Object>> solution;
+        String algorithmUsed;
 
         boolean isFeasible() {
             return isFeasible;
