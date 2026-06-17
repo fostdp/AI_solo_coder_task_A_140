@@ -33,6 +33,8 @@ public class StabilityResultDTO {
     private BigDecimal rightingMoment;
     private BigDecimal rollPeriod;
     private BigDecimal gmValue;
+    private BigDecimal freeSurfaceCorrection;
+    private BigDecimal gmUncorrected;
     private String stabilityStatus;
     private String warningMessage;
     private List<Map<String, Object>> curvePoints;
