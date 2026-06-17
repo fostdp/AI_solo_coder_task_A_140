@@ -76,6 +76,12 @@ public class StabilityResult {
     @Column(name = "gm_value", precision = 8, scale = 4)
     private BigDecimal gmValue;
 
+    @Column(name = "free_surface_correction", precision = 8, scale = 4)
+    private BigDecimal freeSurfaceCorrection;
+
+    @Column(name = "gm_uncorrected", precision = 8, scale = 4)
+    private BigDecimal gmUncorrected;
+
     @Column(name = "stability_status", nullable = false, length = 20)
     private String stabilityStatus = "NORMAL";
 
