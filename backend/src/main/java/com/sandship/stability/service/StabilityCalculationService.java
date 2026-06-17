@@ -75,8 +75,12 @@ public class StabilityCalculationService {
         BigDecimal displacement = calculateDisplacement(ship, sensorData, cargoLoadings);
         BigDecimal[] centerOfBuoyancy = calculateCenterOfBuoyancy(ship, sensorData);
 
-        BigDecimal gmTransverse = calculateTransverseGM(ship, centerOfGravity[2], centerOfBuoyancy[2]);
-        BigDecimal gmLongitudinal = calculateLongitudinalGM(ship, centerOfGravity[2], centerOfBuoyancy[2]);
+        BigDecimal freeSurfaceCorrection = calculateFreeSurfaceCorrection(cargoHolds, displacement);
+
+        BigDecimal gmTransverse = calculateTransverseGM(ship, centerOfGravity[2], centerOfBuoyancy[2], freeSurfaceCorrection);
+        BigDecimal gmLongitudinal = calculateLongitudinalGM(ship, centerOfGravity[2], centerOfBuoyancy[2], freeSurfaceCorrection);
+
+        BigDecimal gmUncorrected = gmTransverse.add(freeSurfaceCorrection);
 
         BigDecimal rollAngle = sensorData != null && sensorData.getRollAngle() != null
                 ? sensorData.getRollAngle() : BigDecimal.ZERO;
@@ -109,6 +113,8 @@ public class StabilityCalculationService {
         result.setRightingMoment(rightingMoment);
         result.setRollPeriod(rollPeriod);
         result.setGmValue(gmTransverse);
+        result.setFreeSurfaceCorrection(freeSurfaceCorrection);
+        result.setGmUncorrected(gmUncorrected);
         result.setStabilityStatus(stabilityStatus);
         result.setWarningMessage(warningMessage);
         result.setCurvePoints(curvePoints);
@@ -190,7 +196,7 @@ public class StabilityCalculationService {
         return new BigDecimal[]{cbX, cbY, cbZ};
     }
 
-    private BigDecimal calculateTransverseGM(Ship ship, BigDecimal cgZ, BigDecimal cbZ) {
+    private BigDecimal calculateTransverseGM(Ship ship, BigDecimal cgZ, BigDecimal cbZ, BigDecimal fsc) {
         double breadth = ship.getBreadthMolded().doubleValue();
         double length = ship.getLengthOverall().doubleValue();
         double draft = ship.getDesignDraft().doubleValue();
@@ -200,12 +206,12 @@ public class StabilityCalculationService {
         double kb = cbZ.doubleValue();
         double bmt = it / displacement * SEAWATER_DENSITY;
         double km = kb + bmt;
-        double gm = km - cgZ.doubleValue();
+        double gm = km - cgZ.doubleValue() - fsc.doubleValue();
 
         return BigDecimal.valueOf(gm).setScale(4, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal calculateLongitudinalGM(Ship ship, BigDecimal cgZ, BigDecimal cbZ) {
+    private BigDecimal calculateLongitudinalGM(Ship ship, BigDecimal cgZ, BigDecimal cbZ, BigDecimal fsc) {
         double breadth = ship.getBreadthMolded().doubleValue();
         double length = ship.getLengthOverall().doubleValue();
         double draft = ship.getDesignDraft().doubleValue();
@@ -215,9 +221,41 @@ public class StabilityCalculationService {
         double kb = cbZ.doubleValue();
         double bml = il / displacement * SEAWATER_DENSITY;
         double kml = kb + bml;
-        double gml = kml - cgZ.doubleValue();
+        double gml = kml - cgZ.doubleValue() - fsc.doubleValue();
 
         return BigDecimal.valueOf(gml).setScale(4, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateFreeSurfaceCorrection(List<CargoHold> cargoHolds, BigDecimal displacement) {
+        double totalFsc = 0.0;
+        double disp = displacement.doubleValue();
+
+        for (CargoHold hold : cargoHolds) {
+            if (Boolean.TRUE.equals(hold.getIsTank())
+                    && hold.getTankLength() != null
+                    && hold.getTankBreadth() != null
+                    && hold.getLiquidDensity() != null
+                    && hold.getTankFullness() != null) {
+
+                double l = hold.getTankLength().doubleValue();
+                double b = hold.getTankBreadth().doubleValue();
+                double rho = hold.getLiquidDensity().doubleValue();
+                double fullness = hold.getTankFullness().doubleValue();
+
+                if (fullness > 0.01 && fullness < 0.99) {
+                    double it = (l * FastMath.pow(b, 3)) / 12.0;
+                    double correctionFactor = 1.0 - FastMath.abs(fullness - 0.5) * 0.4;
+                    double fsc = (rho * it * correctionFactor) / disp;
+                    totalFsc += fsc;
+                }
+            }
+        }
+
+        if (totalFsc > 0) {
+            log.debug("自由液面修正量: {:.4f}m", totalFsc);
+        }
+
+        return BigDecimal.valueOf(totalFsc).setScale(4, RoundingMode.HALF_UP);
     }
 
     private BigDecimal calculateRightingArm(BigDecimal gm, BigDecimal rollAngle) {
@@ -339,6 +377,8 @@ public class StabilityCalculationService {
         dto.setRightingMoment(result.getRightingMoment());
         dto.setRollPeriod(result.getRollPeriod());
         dto.setGmValue(result.getGmValue());
+        dto.setFreeSurfaceCorrection(result.getFreeSurfaceCorrection());
+        dto.setGmUncorrected(result.getGmUncorrected());
         dto.setStabilityStatus(result.getStabilityStatus());
         dto.setWarningMessage(result.getWarningMessage());
         dto.setCurvePoints(result.getCurvePoints());
