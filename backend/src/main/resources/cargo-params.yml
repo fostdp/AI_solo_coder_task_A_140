@@ -1,0 +1,66 @@
+# 古代沙船货物参数配置
+# 密度单位: t/m³, 单位重量: t/单位, 价值单位: 贯/单位 (宋代铜钱)
+
+cargo:
+  # 粮食类
+  grain:
+    cargo-code: GRAIN
+    cargo-name: 粮食
+    density: 0.750
+    unit-weight: 0.50
+    color-hex: "#DEB887"
+    priority-weight: 1.5
+    unit-value: 2.0
+    stowage-factor: 1.33
+
+  # 海盐类
+  salt:
+    cargo-code: SALT
+    cargo-name: 海盐
+    density: 2.160
+    unit-weight: 0.80
+    color-hex: "#F0F8FF"
+    priority-weight: 1.0
+    unit-value: 3.5
+    stowage-factor: 0.46
+
+  # 茶叶
+  tea:
+    cargo-code: TEA
+    cargo-name: 茶叶
+    density: 0.450
+    unit-weight: 0.45
+    color-hex: "#228B22"
+    priority-weight: 2.0
+    unit-value: 15.0
+    stowage-factor: 2.22
+
+  # 瓷器
+  porcelain:
+    cargo-code: PORCELAIN
+    cargo-name: 瓷器
+    density: 1.800
+    unit-weight: 1.80
+    color-hex: "#E6E6FA"
+    priority-weight: 2.5
+    unit-value: 50.0
+    stowage-factor: 0.56
+
+  # 丝绸
+  silk:
+    cargo-code: SILK
+    cargo-name: 丝绸
+    density: 0.350
+    unit-weight: 0.35
+    color-hex: "#FFB6C1"
+    priority-weight: 3.0
+    unit-value: 80.0
+    stowage-factor: 2.86
+
+  # 默认优化权重
+  optimization:
+    default-grain-priority: 1.0
+    default-salt-priority: 1.0
+    min-gm-required: 0.3
+    max-roll-angle: 15.0
+    max-trim: 0.5

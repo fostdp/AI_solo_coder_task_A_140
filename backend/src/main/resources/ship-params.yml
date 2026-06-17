@@ -1,0 +1,73 @@
+# 古代沙船（方艄）船体参数配置
+# 所有尺寸单位: 米 (m), 重量单位: 吨 (t)
+
+ship:
+  hull:
+    # 方型系数 - 不同装载状态下的经验值
+    block-coefficients:
+      lightship: 0.60
+      half-loaded: 0.65
+      full-loaded: 0.68
+    default: 0.65
+
+    # 横摇惯性半径系数 (k = K * B, B为船宽)
+    roll-radius-coefficient: 0.35
+
+    # 浮心垂向位置系数 (KB = Kb * d, d为吃水)
+    buoyancy-center-coefficient: 0.54
+
+    # 海水密度 (t/m³)
+    seawater-density: 1.025
+
+    # 设计吃水对应的稳心高度参考值
+    design-metacentric-height: 0.85
+
+  # 沙船型谱 - 宋代典型尺寸
+  spectrum:
+    fangshao-small:
+      length-overall: 30.0
+      breadth-molded: 8.0
+      depth-molded: 2.8
+      design-draft: 1.8
+      displacement: 320.0
+      lightship-weight: 140.0
+      deadweight-tons: 180.0
+
+    fangshao-medium:
+      length-overall: 35.0
+      breadth-molded: 9.5
+      depth-molded: 3.2
+      design-draft: 2.1
+      displacement: 420.0
+      lightship-weight: 180.0
+      deadweight-tons: 240.0
+
+    fangshao-large:
+      length-overall: 38.0
+      breadth-molded: 10.0
+      depth-molded: 3.5
+      design-draft: 2.3
+      displacement: 520.0
+      lightship-weight: 210.0
+      deadweight-tons: 310.0
+
+  # 货舱标准布局参数
+  cargo-holds:
+    standard-count: 4
+    capacity-per-hold:
+      small: 85.0
+      medium: 95.0
+      large: 105.0
+
+  # 液舱标准参数
+  tanks:
+    fresh-water:
+      count: 1
+      default-length: 4.0
+      default-breadth: 3.0
+      default-density: 1.000
+    ballast:
+      count: 2
+      default-length: 6.0
+      default-breadth: 3.0
+      default-density: 1.025

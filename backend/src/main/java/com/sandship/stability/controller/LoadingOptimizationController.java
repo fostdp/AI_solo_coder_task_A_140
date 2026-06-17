@@ -5,7 +5,7 @@ import com.sandship.stability.dto.LoadingOptimizationRequest;
 import com.sandship.stability.dto.LoadingOptimizationResultDTO;
 import com.sandship.stability.entity.LoadingOptimization;
 import com.sandship.stability.repository.LoadingOptimizationRepository;
-import com.sandship.stability.service.LoadingOptimizationService;
+import com.sandship.stability.loading_optimizer.LoadingOptimizerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +23,7 @@ import java.util.UUID;
 public class LoadingOptimizationController {
 
     @Autowired
-    private LoadingOptimizationService loadingOptimizationService;
+    private LoadingOptimizerService loadingOptimizerService;
 
     @Autowired
     private LoadingOptimizationRepository optimizationRepository;
@@ -33,7 +33,7 @@ public class LoadingOptimizationController {
     public ApiResponse<LoadingOptimizationResultDTO> optimizeLoading(
             @RequestBody LoadingOptimizationRequest request) {
         try {
-            LoadingOptimizationResultDTO result = loadingOptimizationService
+            LoadingOptimizationResultDTO result = loadingOptimizerService
                     .optimizeLoading(request);
             return ApiResponse.success("装载优化完成", result);
         } catch (Exception e) {
@@ -45,8 +45,8 @@ public class LoadingOptimizationController {
     @Operation(summary = "获取船舶最新装载优化结果")
     public ApiResponse<LoadingOptimizationResultDTO> getLatestOptimization(
             @PathVariable UUID shipId) {
-        Optional<LoadingOptimization> opt = loadingOptimizationService
-                .getLatestOptimization(shipId);
+        Optional<LoadingOptimization> opt = optimizationRepository
+                .findTopByShipIdOrderByOptimizationTimeDesc(shipId);
         if (opt.isEmpty()) {
             return ApiResponse.error("暂无装载优化记录");
         }
@@ -66,6 +66,8 @@ public class LoadingOptimizationController {
         dto.setStatus(optimization.getStatus());
         dto.setSolution(optimization.getSolution());
         dto.setObjectiveValue(optimization.getObjectiveValue());
+        dto.setSolveTimeMs(optimization.getSolveTimeMs());
+        dto.setAlgorithmUsed(optimization.getAlgorithmUsed());
         dto.setCreatedAt(optimization.getCreatedAt());
 
         return ApiResponse.success(dto);

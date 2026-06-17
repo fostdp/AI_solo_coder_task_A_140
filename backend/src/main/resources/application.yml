@@ -56,8 +56,11 @@ spring:
 
 stability:
   min-gm-threshold: 0.3
+  critical-gm-threshold: 0.15
   max-roll-angle: 15.0
+  critical-roll-angle: 25.0
   max-bilge-water: 0.5
+  critical-bilge-water: 1.0
   calculation-interval: 60000
   curve-step: 1.0
   curve-max-angle: 60.0

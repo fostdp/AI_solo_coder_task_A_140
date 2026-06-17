@@ -43,8 +43,14 @@ public class Alarm {
     @Column(name = "alarm_level", nullable = false, length = 20)
     private String alarmLevel = "WARNING";
 
+    @Column(name = "severity", length = 20)
+    private String severity;
+
     @Column(name = "alarm_message", nullable = false, columnDefinition = "TEXT")
     private String alarmMessage;
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
 
     @Column(name = "parameter_name", length = 50)
     private String parameterName;
@@ -58,8 +64,17 @@ public class Alarm {
     @Column(name = "is_acknowledged")
     private Boolean isAcknowledged = false;
 
+    @Column(name = "acknowledged")
+    private Boolean acknowledged = false;
+
     @Column(name = "acknowledged_at")
     private LocalDateTime acknowledgedAt;
+
+    @Column(name = "acknowledged_by", length = 100)
+    private String acknowledgedBy;
+
+    @Column(name = "triggered_at")
+    private LocalDateTime triggeredAt;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

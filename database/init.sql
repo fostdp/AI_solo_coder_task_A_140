@@ -148,12 +148,17 @@ CREATE TABLE IF NOT EXISTS alarms (
     alarm_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     alarm_type VARCHAR(50) NOT NULL,
     alarm_level VARCHAR(20) NOT NULL DEFAULT 'WARNING',
+    severity VARCHAR(20),
     alarm_message TEXT NOT NULL,
+    description TEXT,
     parameter_name VARCHAR(50),
     parameter_value NUMERIC(12, 4),
     threshold_value NUMERIC(12, 4),
     is_acknowledged BOOLEAN DEFAULT false,
+    acknowledged BOOLEAN DEFAULT false,
     acknowledged_at TIMESTAMP,
+    acknowledged_by VARCHAR(100),
+    triggered_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

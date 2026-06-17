@@ -6,7 +6,7 @@ import com.sandship.stability.entity.SensorData;
 import com.sandship.stability.entity.StabilityResult;
 import com.sandship.stability.repository.SensorDataRepository;
 import com.sandship.stability.repository.StabilityResultRepository;
-import com.sandship.stability.service.StabilityCalculationService;
+import com.sandship.stability.stability_simulator.StabilitySimulatorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 public class StabilityController {
 
     @Autowired
-    private StabilityCalculationService stabilityCalculationService;
+    private StabilitySimulatorService stabilitySimulatorService;
 
     @Autowired
     private StabilityResultRepository stabilityResultRepository;
@@ -39,8 +39,9 @@ public class StabilityController {
     @GetMapping("/ship/{shipId}/latest")
     @Operation(summary = "获取船舶最新稳性计算结果")
     public ApiResponse<StabilityResultDTO> getLatestStability(@PathVariable UUID shipId) {
-        Optional<StabilityResult> result = stabilityCalculationService.getLatestStability(shipId);
-        return result.map(r -> ApiResponse.success(stabilityCalculationService.convertToDTO(r)))
+        Optional<StabilityResult> result = stabilityResultRepository
+                .findTopByShipIdOrderByCalculationTimeDesc(shipId);
+        return result.map(r -> ApiResponse.success(stabilitySimulatorService.convertToDTO(r)))
                 .orElse(ApiResponse.error("暂无稳性数据"));
     }
 
@@ -53,7 +54,7 @@ public class StabilityController {
         Page<StabilityResult> results = stabilityResultRepository
                 .findByShipIdOrderByCalculationTimeDesc(
                         shipId, PageRequest.of(page, size, Sort.by("calculationTime").descending()));
-        Page<StabilityResultDTO> dtoPage = results.map(stabilityCalculationService::convertToDTO);
+        Page<StabilityResultDTO> dtoPage = results.map(stabilitySimulatorService::convertToDTO);
         return ApiResponse.success(dtoPage);
     }
 
@@ -63,10 +64,11 @@ public class StabilityController {
             @PathVariable UUID shipId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
-        List<StabilityResult> results = stabilityCalculationService
-                .getStabilityHistory(shipId, startTime, endTime);
+        List<StabilityResult> results = stabilityResultRepository
+                .findByShipIdAndCalculationTimeBetweenOrderByCalculationTimeDesc(
+                        shipId, startTime, endTime);
         List<StabilityResultDTO> dtos = results.stream()
-                .map(stabilityCalculationService::convertToDTO)
+                .map(stabilitySimulatorService::convertToDTO)
                 .collect(Collectors.toList());
         return ApiResponse.success(dtos);
     }
@@ -76,7 +78,7 @@ public class StabilityController {
     public ApiResponse<List<StabilityResultDTO>> getStabilityWarnings(@PathVariable UUID shipId) {
         List<StabilityResult> results = stabilityResultRepository.findWarningsByShipId(shipId);
         List<StabilityResultDTO> dtos = results.stream()
-                .map(stabilityCalculationService::convertToDTO)
+                .map(stabilitySimulatorService::convertToDTO)
                 .collect(Collectors.toList());
         return ApiResponse.success(dtos);
     }
@@ -87,10 +89,10 @@ public class StabilityController {
         try {
             Optional<SensorData> latestSensorData = sensorDataRepository
                     .findTopByShipIdOrderByTimestampDesc(shipId);
-            StabilityResult result = stabilityCalculationService
+            StabilityResult result = stabilitySimulatorService
                     .calculateAndSaveStability(shipId, latestSensorData.orElse(null));
             return ApiResponse.success("稳性计算完成",
-                    stabilityCalculationService.convertToDTO(result));
+                    stabilitySimulatorService.convertToDTO(result));
         } catch (Exception e) {
             return ApiResponse.error("稳性计算失败: " + e.getMessage());
         }
@@ -100,7 +102,7 @@ public class StabilityController {
     @Operation(summary = "根据ID获取稳性计算详情")
     public ApiResponse<StabilityResultDTO> getStabilityById(@PathVariable UUID id) {
         Optional<StabilityResult> result = stabilityResultRepository.findById(id);
-        return result.map(r -> ApiResponse.success(stabilityCalculationService.convertToDTO(r)))
+        return result.map(r -> ApiResponse.success(stabilitySimulatorService.convertToDTO(r)))
                 .orElse(ApiResponse.error("稳性记录不存在"));
     }
 }

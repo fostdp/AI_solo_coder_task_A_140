@@ -19,10 +19,16 @@ public interface AlarmRepository extends JpaRepository<Alarm, UUID> {
 
     Page<Alarm> findByShipIdOrderByAlarmTimeDesc(UUID shipId, Pageable pageable);
 
+    Page<Alarm> findByShipIdOrderByTriggeredAtDesc(UUID shipId, Pageable pageable);
+
     List<Alarm> findByShipIdAndIsAcknowledgedFalseOrderByAlarmTimeDesc(UUID shipId);
+
+    List<Alarm> findByShipIdAndAcknowledgedFalseOrderByTriggeredAtDesc(UUID shipId);
 
     @Query("SELECT COUNT(a) FROM Alarm a WHERE a.shipId = :shipId AND a.isAcknowledged = false")
     long countUnacknowledgedByShipId(@Param("shipId") UUID shipId);
+
+    long countByShipIdAndAcknowledgedFalse(UUID shipId);
 
     @Modifying
     @Transactional
@@ -37,4 +43,6 @@ public interface AlarmRepository extends JpaRepository<Alarm, UUID> {
                                  @Param("startTime") LocalDateTime startTime);
 
     List<Alarm> findByShipIdAndAlarmLevelOrderByAlarmTimeDesc(UUID shipId, String alarmLevel);
+
+    List<Alarm> findByShipIdAndSeverityOrderByTriggeredAtDesc(UUID shipId, String severity);
 }

@@ -2,9 +2,11 @@ package com.sandship.stability.repository;
 
 import com.sandship.stability.entity.CargoLoading;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -29,4 +31,9 @@ public interface CargoLoadingRepository extends JpaRepository<CargoLoading, UUID
     @Query("SELECT cl FROM CargoLoading cl JOIN FETCH cl.cargoHold JOIN FETCH cl.cargoType " +
            "WHERE cl.shipId = :shipId ORDER BY cl.cargoHold.holdNumber")
     List<CargoLoading> findByShipIdWithDetails(@Param("shipId") UUID shipId);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM CargoLoading cl WHERE cl.shipId = :shipId")
+    void deleteByShipId(@Param("shipId") UUID shipId);
 }

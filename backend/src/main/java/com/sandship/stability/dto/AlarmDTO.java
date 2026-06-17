@@ -21,11 +21,16 @@ public class AlarmDTO {
     private LocalDateTime alarmTime;
     private String alarmType;
     private String alarmLevel;
+    private String severity;
     private String alarmMessage;
+    private String description;
     private String parameterName;
     private BigDecimal parameterValue;
     private BigDecimal thresholdValue;
     private Boolean isAcknowledged;
+    private Boolean acknowledged;
     private LocalDateTime acknowledgedAt;
+    private String acknowledgedBy;
+    private LocalDateTime triggeredAt;
     private LocalDateTime createdAt;
 }
