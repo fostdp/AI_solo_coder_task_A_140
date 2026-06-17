@@ -18,4 +18,6 @@ public class LoadingOptimizationRequest {
     private BigDecimal minGmRequired;
     private BigDecimal maxTrimAngle;
     private Boolean prioritizeGrain;
+    private Boolean useHeuristic;
+    private Boolean refineWithMip;
 }
